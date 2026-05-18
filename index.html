@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestão Financeira M&C</title>
+  <meta name="theme-color" content="#185FA5" />
+  <meta name="description" content="Aplicativo de gestão financeira pessoal com dashboard, lançamentos, cartões, despesas fixas e metas." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/icon-192.svg" />
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+<button type="button" class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileMenu()" aria-label="Abrir menu"><i class="ti ti-menu-2" aria-hidden="true"></i></button>
+<div class="mobile-overlay" id="mobileOverlay" onclick="fecharMobileMenu()"></div>
+<h2 class="sr-only">Gestão Financeira M&C — app com dashboard, lançamentos, despesas fixas, investimentos e metas</h2>
+
+<section class="auth-screen" id="authScreen">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <div class="auth-logo"><i class="ti ti-wallet" aria-hidden="true"></i></div>
+      <div>
+        <h1>Gestão Financeira</h1>
+        <p>M&amp;C · acesso seguro</p>
+      </div>
+    </div>
+
+    <div class="auth-tabs">
+      <button type="button" class="auth-tab active" id="tabLogin" onclick="alternarAuth('login')">Entrar</button>
+      <button type="button" class="auth-tab" id="tabCadastro" onclick="alternarAuth('cadastro')">Cadastrar</button>
+    </div>
+
+    <div class="auth-message" id="authMessage" style="display:none;"></div>
+
+    <div class="auth-form">
+      <div class="form-group">
+        <label class="form-label">E-mail</label>
+        <input type="email" id="authEmail" placeholder="seuemail@exemplo.com" autocomplete="email" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Senha</label>
+        <input type="password" id="authSenha" placeholder="Mínimo de 6 caracteres" autocomplete="current-password" />
+      </div>
+
+      <button type="button" class="btn-primary auth-main-btn" id="btnAuth" onclick="executarAuth()">Entrar</button>
+
+      <button type="button" class="auth-link" onclick="recuperarSenha()">Esqueci minha senha</button>
+    </div>
+
+    <p class="auth-note">Após o login, seus dados serão vinculados ao seu usuário. Agora seus dados ficam salvos na nuvem pelo Firebase.</p>
+  </div>
+</section>
+
+
+<div class="app" style="position:relative;display:none;" id="appRoot">
+
+  <div class="sidebar" id="sidebarMenu">
+    <div class="logo">
+      <div class="logo-title"><i class="ti ti-wallet" aria-hidden="true"></i> Gestão Financeira</div>
+      <div class="logo-sub">M&amp;C · gestão pessoal</div>
+      <div class="user-box">
+        <div class="user-label">Usuário logado</div>
+        <div class="user-email" id="userEmailLogado">-</div>
+        <button type="button" class="btn-sm logout-btn" onclick="sairDoApp()"><i class="ti ti-logout" aria-hidden="true"></i> Sair</button>
+      </div>
+    </div>
+    <div class="nav-item active" onclick="showPage('dashboard',this);fecharMobileMenu()"><i class="ti ti-layout-dashboard" aria-hidden="true"></i> Dashboard</div>
+    <div class="nav-item" onclick="showPage('lancamentos',this);fecharMobileMenu()"><i class="ti ti-list" aria-hidden="true"></i> Lançamentos</div>
+    <div class="nav-item" onclick="showPage('cartoes',this);fecharMobileMenu()"><i class="ti ti-credit-card" aria-hidden="true"></i> Cartões</div>
+    <div class="nav-item" onclick="showPage('fixas',this);fecharMobileMenu()"><i class="ti ti-refresh" aria-hidden="true"></i> Despesas fixas</div>
+    <div class="nav-item" onclick="showPage('investimentos',this);fecharMobileMenu()"><i class="ti ti-trending-up" aria-hidden="true"></i> Investimentos</div>
+    <div class="nav-item" onclick="showPage('metas',this);fecharMobileMenu()"><i class="ti ti-target" aria-hidden="true"></i> Metas</div>
+    <div class="nav-item" onclick="showPage('relatorios',this);fecharMobileMenu()"><i class="ti ti-chart-bar" aria-hidden="true"></i> Relatórios</div>
+  </div>
+
+  <div class="main">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title" id="dashboard-title">Dashboard</div>
+          <div style="font-size:11px;color:var(--color-text-secondary);margin-top:3px;">Os valores são calculados conforme o mês selecionado.</div>
+        </div>
+        <div class="period-filter">
+          <label class="form-label" for="filtro-dashboard-mes">Visualizar mês</label>
+          <input type="month" id="filtro-dashboard-mes" onchange="alterarMesDashboard(this.value)" />
+        </div>
+      </div>
+
+      <div class="metrics">
+        <div class="metric"><div class="metric-label"><i class="ti ti-arrow-up" aria-hidden="true"></i> Receitas</div><div class="metric-value green" id="dash-rec">R$ 0,00</div></div>
+        <div class="metric"><div class="metric-label"><i class="ti ti-arrow-down" aria-hidden="true"></i> Despesas</div><div class="metric-value red" id="dash-desp">R$ 0,00</div></div>
+        <div class="metric"><div class="metric-label"><i class="ti ti-scale" aria-hidden="true"></i> Saldo</div><div class="metric-value blue" id="dash-saldo">R$ 0,00</div></div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="metric-label"><i class="ti ti-credit-card" aria-hidden="true"></i> Faturas do mês</div><div class="metric-value red" id="dash-faturas">R$ 0,00</div></div>
+        <div class="metric"><div class="metric-label"><i class="ti ti-percentage" aria-hidden="true"></i> Limite utilizado</div><div class="metric-value blue" id="dash-limite-usado">0,0%</div></div>
+        <div class="metric"><div class="metric-label"><i class="ti ti-pig-money" aria-hidden="true"></i> Economia do mês</div><div class="metric-value green" id="dash-economia">R$ 0,00</div></div>
+      </div>
+      <div style="background:#E6F1FB;border-radius:var(--border-radius-md);padding:10px 14px;font-size:12px;color:#0C447C;display:flex;align-items:center;gap:8px;">
+        <i class="ti ti-refresh" aria-hidden="true"></i>
+        <span>Despesas fixas deste mês: <strong id="dash-fixas-total">R$ 0,00</strong> incluídas automaticamente</span>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-title">Gastos por categoria</div>
+          <div class="legend" id="dash-cat-legend"></div>
+          <div class="chart-wrap"><canvas id="pieChart" role="img" aria-label="Gráfico de gastos por categoria"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Evolução mensal</div>
+          <div class="legend">
+            <span><span class="legend-dot" style="background:#1D9E75"></span>Receitas</span>
+            <span><span class="legend-dot" style="background:none;border-bottom:2px dashed #D85A30;width:16px;height:0;border-radius:0;"></span>Despesas</span>
+          </div>
+          <div class="chart-wrap"><canvas id="lineChart" role="img" aria-label="Gráfico de evolução mensal"></canvas></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Últimos lançamentos do mês</div>
+        <div class="trans-list" id="dash-ultimos-lancamentos"></div>
+      </div>
+    </div>
+
+    <!-- LANÇAMENTOS -->
+    <div class="page" id="page-lancamentos">
+      <div class="page-title">Lançamentos</div>
+      <div class="card">
+        <div class="card-title" id="form-title">Novo lançamento</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Descrição</label><input type="text" id="f-desc" placeholder="Ex: Supermercado" /></div>
+          <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" id="f-val" placeholder="0,00" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <select id="f-tipo"></select>
+            <div class="inline-add" style="margin-top:6px;">
+              <input type="text" id="novo-tipo" placeholder="Ex: Transferência" />
+              <button type="button" class="btn-sm" onclick="adicionarOpcao('tiposLancamento','novo-tipo','f-tipo')">Adicionar</button>
+              <button type="button" class="btn-sm btn-danger-soft" onclick="removerOpcao('tiposLancamento','f-tipo')">Excluir selecionado</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Categoria</label>
+            <select id="f-cat"></select>
+            <div class="inline-add" style="margin-top:6px;">
+              <input type="text" id="nova-categoria" placeholder="Ex: Educação" />
+              <button type="button" class="btn-sm" onclick="adicionarOpcao('categoriasLancamento','nova-categoria','f-cat')">Adicionar</button>
+              <button type="button" class="btn-sm btn-danger-soft" onclick="removerOpcao('categoriasLancamento','f-cat')">Excluir selecionada</button>
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Cartão de crédito utilizado</label>
+            <select id="f-cartao"></select>
+            <div class="inline-add" style="margin-top:6px;">
+              <input type="text" id="novo-cartao" placeholder="Ex: Nubank, Itaú, Bradesco" />
+              <button type="button" class="btn-sm" onclick="adicionarOpcao('cartoesCredito','novo-cartao','f-cartao')">Adicionar</button>
+              <button type="button" class="btn-sm btn-danger-soft" onclick="removerOpcao('cartoesCredito','f-cartao')">Excluir selecionado</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Conta</label>
+            <select id="f-conta"></select>
+            <div class="inline-add" style="margin-top:6px;">
+              <input type="text" id="nova-conta" placeholder="Ex: PicPay, Mercado Pago" />
+              <button type="button" class="btn-sm" onclick="adicionarOpcao('contasLancamento','nova-conta','f-conta')">Adicionar</button>
+              <button type="button" class="btn-sm btn-danger-soft" onclick="removerOpcao('contasLancamento','f-conta')">Excluir selecionada</button>
+            </div>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Data</label><input type="date" id="f-data" /></div>
+          <div class="form-group"></div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-primary" id="btn-salvar" onclick="salvarLancamento()">Salvar lançamento</button>
+          <button class="btn-sm" id="btn-cancelar" style="display:none" onclick="cancelarEdicao()">Cancelar</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header card-header-wrap">
+          <span class="card-title" style="margin-bottom:0">Histórico do mês</span>
+          <div class="period-filter compact">
+            <label class="form-label" for="filtro-lancamentos-mes">Filtrar mês/ano</label>
+            <input type="month" id="filtro-lancamentos-mes" onchange="alterarMesLancamentos(this.value)" />
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:8px;">Clique em <i class="ti ti-edit" aria-hidden="true"></i> para editar ou na lixeira para excluir.</div>
+        <div class="trans-list" id="lista-lancamentos"></div>
+      </div>
+    </div>
+
+
+    <!-- CARTÕES -->
+    <div class="page" id="page-cartoes">
+      <div class="page-title">Cartões de crédito</div>
+      <div style="background:#E6F1FB;border-radius:var(--border-radius-md);padding:10px 14px;font-size:12px;color:#0C447C;display:flex;gap:8px;align-items:flex-start;">
+        <i class="ti ti-info-circle" aria-hidden="true" style="font-size:15px;margin-top:1px;flex-shrink:0;"></i>
+        <span>Cadastre seus cartões para o sistema calcular faturas, limite utilizado e despesas no mês correto conforme fechamento e vencimento.</span>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="metric-label">Limite total</div><div class="metric-value blue" id="cartoes-limite-total">R$ 0,00</div></div>
+        <div class="metric"><div class="metric-label">Fatura do mês selecionado</div><div class="metric-value red" id="cartoes-fatura-mes">R$ 0,00</div></div>
+        <div class="metric"><div class="metric-label">Limite disponível</div><div class="metric-value green" id="cartoes-limite-disponivel">R$ 0,00</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Novo cartão</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Nome do cartão</label><input type="text" id="card-nome" placeholder="Ex: Nubank" /></div>
+          <div class="form-group"><label class="form-label">Limite (R$)</label><input type="number" id="card-limite" placeholder="0,00" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Dia de fechamento</label><input type="number" id="card-fechamento" min="1" max="31" placeholder="Ex: 25" /></div>
+          <div class="form-group"><label class="form-label">Dia de vencimento</label><input type="number" id="card-vencimento" min="1" max="31" placeholder="Ex: 05" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Cor/identificação</label><input type="color" id="card-cor" value="#185FA5" /></div>
+          <div class="form-group"><label class="form-label">Status</label><select id="card-ativo"><option value="true">Ativo</option><option value="false">Inativo</option></select></div>
+        </div>
+        <button class="btn-primary" id="btn-salvar-cartao" onclick="salvarCartao()">Salvar cartão</button>
+        <button class="btn-sm" id="btn-cancelar-cartao" style="display:none" onclick="cancelarEdicaoCartao()">Cancelar edição</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Meus cartões</div>
+        <div class="trans-list" id="lista-cartoes"></div>
+      </div>
+    </div>
+
+    <!-- DESPESAS FIXAS -->
+    <div class="page" id="page-fixas">
+      <div class="page-title">Despesas fixas</div>
+      <div style="background:#E6F1FB;border-radius:var(--border-radius-md);padding:10px 14px;font-size:12px;color:#0C447C;display:flex;gap:8px;align-items:flex-start;">
+        <i class="ti ti-info-circle" aria-hidden="true" style="font-size:15px;margin-top:1px;flex-shrink:0;"></i>
+        <span>As despesas fixas são incluídas automaticamente todo mês no cálculo do saldo. Você não precisa lançá-las manualmente.</span>
+      </div>
+      <div class="card">
+        <div class="card-title">Nova despesa fixa</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Descrição</label><input type="text" id="fix-desc" placeholder="Ex: Netflix" /></div>
+          <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" id="fix-val" placeholder="0,00" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Categoria</label>
+            <select id="fix-cat"></select>
+            <div class="inline-add" style="margin-top:6px;">
+              <input type="text" id="nova-categoria-fixa" placeholder="Ex: Assinaturas, Educação" />
+              <button type="button" class="btn-sm" onclick="adicionarOpcao('categoriasFixas','nova-categoria-fixa','fix-cat')">Adicionar</button>
+              <button type="button" class="btn-sm btn-danger-soft" onclick="removerOpcao('categoriasFixas','fix-cat')">Excluir selecionada</button>
+            </div>
+          </div>
+          <div class="form-group"><label class="form-label">Dia de vencimento</label>
+            <input type="number" id="fix-dia" min="1" max="31" placeholder="Ex: 10" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Data início da despesa fixa</label>
+            <input type="month" id="fix-inicio" />
+          </div>
+          <div class="form-group"></div>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle on" id="fix-toggle" onclick="toggleFixed(this)" aria-label="Ativa">
+            <div class="toggle-knob"></div>
+          </div>
+          <span class="toggle-label" id="fix-toggle-label">Ativa — será lançada todo mês</span>
+        </div>
+        <button class="btn-primary" onclick="addFixa()">Adicionar despesa fixa</button>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title" style="margin-bottom:0">Minhas despesas fixas</span>
+          <span class="metric-value green" style="font-size:14px;" id="total-fixas">Total: R$ 2.380/mês</span>
+        </div>
+        <div class="trans-list" id="lista-fixas"></div>
+      </div>
+    </div>
+
+    <!-- INVESTIMENTOS -->
+    <div class="page" id="page-investimentos">
+      <div class="page-title">Investimentos</div>
+      <div class="card">
+        <div class="card-title">Carteira de investimentos</div>
+        <div class="empty-state">Nenhum investimento cadastrado ainda.</div>
+      </div>
+    </div>
+
+    <!-- METAS -->
+    <div class="page" id="page-metas">
+      <div class="page-title">Metas financeiras</div>
+      <div class="card">
+        <div class="card-title">Minhas metas</div>
+        <div class="empty-state">Nenhuma meta cadastrada ainda.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Nova meta</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Nome da meta</label><input type="text" placeholder="Ex: Carro novo" /></div>
+          <div class="form-group"><label class="form-label">Valor total (R$)</label><input type="number" placeholder="0,00" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Valor atual (R$)</label><input type="number" placeholder="0,00" /></div>
+          <div class="form-group"><label class="form-label">Prazo</label><input type="month" /></div>
+        </div>
+        <button class="btn-primary" onclick="sendPrompt('Quanto devo guardar por mês para atingir minha meta no prazo?')">Calcular quanto guardar por mês ↗</button>
+      </div>
+    </div>
+
+    <!-- RELATÓRIOS -->
+    <div class="page" id="page-relatorios">
+      <div class="page-title">Relatórios</div>
+      <div class="metrics">
+        <div class="metric"><div class="metric-label">Melhor mês (receita)</div><div class="metric-value green">Março · R$ 8.200</div></div>
+        <div class="metric"><div class="metric-label">Maior gasto</div><div class="metric-value red">Moradia · R$ 1.400</div></div>
+        <div class="metric"><div class="metric-label">Saldo acumulado</div><div class="metric-value blue">R$ 11.340</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Receitas vs despesas — últimos 6 meses</div>
+        <div class="legend">
+          <span><span class="legend-dot" style="background:#1D9E75"></span>Receitas</span>
+          <span><span class="legend-dot" style="background:none;border-bottom:2px dashed #D85A30;width:16px;height:0;border-radius:0;"></span>Despesas</span>
+        </div>
+        <div class="chart-wrap" style="height:200px"><canvas id="relChart" role="img" aria-label="Receitas vs despesas últimos 6 meses">Comparativo dez/2024 a mai/2025.</canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Gastos por categoria — acumulado 2025</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="barCat" role="img" aria-label="Gastos por categoria acumulado 2025">Moradia, Alimentação, Transporte, Lazer, Saúde, Outros.</canvas></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MODAL EDIÇÃO -->
+  <div class="modal-bg" id="modal-edit">
+    <div class="modal">
+      <div class="modal-title">Editar lançamento</div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Descrição</label><input type="text" id="e-desc" /></div>
+        <div class="form-group"><label class="form-label">Valor (R$)</label><input type="number" id="e-val" /></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Tipo</label>
+          <select id="e-tipo"></select>
+          <div class="inline-add" style="margin-top:6px;">
+            <input type="text" id="novo-tipo-edicao" placeholder="Ex: Transferência" />
+            <button type="button" class="btn-sm" onclick="adicionarOpcao('tiposLancamento','novo-tipo-edicao','e-tipo')">Adicionar</button>
+              <button type="button" class="btn-sm btn-danger-soft" onclick="removerOpcao('tiposLancamento','e-tipo')">Excluir selecionado</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Categoria</label>
+          <select id="e-cat"></select>
+          <div class="inline-add" style="margin-top:6px;">
+            <input type="text" id="nova-categoria-edicao" placeholder="Ex: Educação" />
+            <button type="button" class="btn-sm" onclick="adicionarOpcao('categoriasLancamento','nova-categoria-edicao','e-cat')">Adicionar</button>
+              <button type="button" class="btn-sm btn-danger-soft" onclick="removerOpcao('categoriasLancamento','e-cat')">Excluir selecionada</button>
+          </div>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:10px"><label class="form-label">Data</label><input type="date" id="e-data" /></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Conta</label>
+          <select id="e-conta"></select>
+          <div class="inline-add" style="margin-top:6px;">
+            <input type="text" id="nova-conta-edicao" placeholder="Ex: PicPay, Mercado Pago" />
+            <button type="button" class="btn-sm" onclick="adicionarOpcao('contasLancamento','nova-conta-edicao','e-conta')">Adicionar</button>
+              <button type="button" class="btn-sm btn-danger-soft" onclick="removerOpcao('contasLancamento','e-conta')">Excluir selecionada</button>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label class="form-label">Cartão de crédito utilizado</label>
+          <select id="e-cartao"></select>
+          <div class="inline-add" style="margin-top:6px;">
+            <input type="text" id="novo-cartao-edicao" placeholder="Ex: Nubank, Itaú, Bradesco" />
+            <button type="button" class="btn-sm" onclick="adicionarOpcao('cartoesCredito','novo-cartao-edicao','e-cartao')">Adicionar</button>
+              <button type="button" class="btn-sm btn-danger-soft" onclick="removerOpcao('cartoesCredito','e-cartao')">Excluir selecionado</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-sm" onclick="fecharModal()">Cancelar</button>
+        <button class="btn-primary" onclick="confirmarEdicao()">Salvar alterações</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- MODAL EXCLUIR CARTÃO -->
+  <div class="modal-bg" id="modal-del-card">
+    <div class="modal">
+      <div class="modal-title">Excluir cartão?</div>
+      <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:0.5rem;">Esta ação não altera os lançamentos já cadastrados.</p>
+      <p style="font-size:13px;color:var(--color-text-primary);" id="del-card-nome"></p>
+      <div class="modal-footer">
+        <button class="btn-sm" onclick="fecharModal()">Cancelar</button>
+        <button class="btn-primary" style="background:#D85A30;" onclick="confirmarExclusaoCartao()">Excluir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL EXCLUIR -->
+  <div class="modal-bg" id="modal-del">
+    <div class="modal">
+      <div class="modal-title">Excluir lançamento?</div>
+      <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:0.5rem;">Esta ação não pode ser desfeita.</p>
+      <p style="font-size:13px;color:var(--color-text-primary);" id="del-nome"></p>
+      <div class="modal-footer">
+        <button class="btn-sm" onclick="fecharModal()">Cancelar</button>
+        <button class="btn-primary" style="background:#D85A30;" onclick="confirmarExclusao()">Excluir</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <script type="module" src="js/auth.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <script src="js/pwa.js"></script>
+</body>
+</html>

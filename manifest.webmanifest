@@ -1,0 +1,24 @@
+{
+  "name": "Gestão Financeira M&C",
+  "short_name": "Financeiro",
+  "description": "Aplicativo de gestão financeira pessoal com dashboard, lançamentos, cartões e despesas fixas.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#EEF3F8",
+  "theme_color": "#185FA5",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
