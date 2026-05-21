@@ -721,6 +721,12 @@ window.confirmarExclusao = async function () {
 
 window.fecharModal = function () {
   document.querySelectorAll('.modal-bg').forEach((m) => m.classList.remove('show'));
+  if (_pluggyMsgHandler) {
+    window.removeEventListener('message', _pluggyMsgHandler);
+    _pluggyMsgHandler = null;
+  }
+  const iframe = document.getElementById('pluggy-iframe');
+  if (iframe) iframe.src = '';
   editandoId = null;
   excluindoId = null;
   excluindoCartaoId = null;
@@ -929,10 +935,12 @@ function hoje() {
 }
 
 function nubankStep(step) {
-  ['conectar', 'carregando', 'preview', 'importando', 'concluido'].forEach((s) => {
+  ['conectar', 'carregando', 'widget', 'preview', 'importando', 'concluido'].forEach((s) => {
     const el = document.getElementById(`nubank-step-${s}`);
     if (el) el.style.display = s === step ? '' : 'none';
   });
+  const modal = document.querySelector('#modal-nubank .modal');
+  if (modal) modal.style.width = step === 'widget' ? 'min(560px,100%)' : '';
 }
 
 function pluggyIdsJaImportados() {
@@ -1022,12 +1030,9 @@ window.abrirModalNubank = function () {
   document.getElementById('modal-nubank').classList.add('show');
 };
 
-window.iniciarConexaoPluggy = async function () {
-  if (typeof PluggyConnect === 'undefined') {
-    alert('Widget do Pluggy não carregou. Verifique sua conexão e recarregue a página.');
-    return;
-  }
+let _pluggyMsgHandler = null;
 
+window.iniciarConexaoPluggy = async function () {
   nubankStep('carregando');
   document.getElementById('nubank-loading-msg').textContent = 'Obtendo token de conexão...';
 
@@ -1038,32 +1043,57 @@ window.iniciarConexaoPluggy = async function () {
       body: JSON.stringify({ clientUserId: usuarioAtual.uid }),
     });
     const data = await res.json();
-
     if (!data.accessToken) throw new Error('Token não recebido: ' + JSON.stringify(data));
 
-    document.getElementById('nubank-loading-msg').textContent = 'Aguardando autenticação no Nubank...';
+    const iframe = document.getElementById('pluggy-iframe');
+    iframe.src = `https://connect.pluggy.ai?connectToken=${encodeURIComponent(data.accessToken)}`;
+    nubankStep('widget');
 
-    const pluggyConnect = new PluggyConnect({
-      connectToken: data.accessToken,
-      onSuccess: async ({ item }) => {
-        nubankItemId = item.id;
-        await salvarConexaoPluggy(item.id);
+    if (_pluggyMsgHandler) window.removeEventListener('message', _pluggyMsgHandler);
+
+    _pluggyMsgHandler = async function (event) {
+      const d = event.data;
+      if (!d || typeof d !== 'object') return;
+
+      // Tenta extrair itemId de diferentes formatos de mensagem do Pluggy
+      let itemId =
+        d?.payload?.item?.id ||
+        d?.data?.item?.id ||
+        d?.item?.id ||
+        d?.itemId ||
+        null;
+
+      // Verifica diferentes tipos de evento de sucesso
+      const tipoSucesso =
+        d?.type === 'pluggyConnect::onSuccess' ||
+        d?.type === 'SUCCESS' ||
+        d?.event === 'onSuccess' ||
+        (itemId && (d?.type?.includes('success') || d?.type?.includes('Success')));
+
+      if (tipoSucesso && itemId) {
+        window.removeEventListener('message', _pluggyMsgHandler);
+        _pluggyMsgHandler = null;
+        iframe.src = '';
+        nubankItemId = itemId;
+        await salvarConexaoPluggy(itemId);
         await buscarTransacoesNubank();
-      },
-      onError: (err) => {
-        console.error('Pluggy widget error:', err);
-        nubankStep('conectar');
-      },
-      onClose: () => {
-        if (!nubankItemId) nubankStep('conectar');
-      },
-    });
+        return;
+      }
 
-    pluggyConnect.open();
+      // Fecha o widget se o usuário cancelar
+      if (d?.type === 'pluggyConnect::onClose' || d?.type === 'CLOSE' || d?.event === 'onClose') {
+        window.removeEventListener('message', _pluggyMsgHandler);
+        _pluggyMsgHandler = null;
+        iframe.src = '';
+        nubankStep('conectar');
+      }
+    };
+
+    window.addEventListener('message', _pluggyMsgHandler);
   } catch (err) {
     console.error('Pluggy init error:', err);
     nubankStep('conectar');
-    alert('Erro ao iniciar conexão com Pluggy: ' + err.message);
+    alert('Erro ao iniciar conexão: ' + err.message);
   }
 };
 
