@@ -128,7 +128,12 @@
 
     <!-- LANÇAMENTOS -->
     <div class="page" id="page-lancamentos">
-      <div class="page-title">Lançamentos</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem;">
+        <div class="page-title" style="margin-bottom:0;">Lançamentos</div>
+        <button type="button" class="btn-primary" onclick="abrirModalNubank()" style="font-size:12px;display:flex;align-items:center;gap:6px;">
+          <i class="ti ti-cloud-download" aria-hidden="true"></i> Importar extrato Nubank
+        </button>
+      </div>
       <div class="card">
         <div class="card-title" id="form-title">Novo lançamento</div>
         <div class="form-row">
@@ -421,9 +426,78 @@
     </div>
   </div>
 
+  <!-- MODAL IMPORTAR NUBANK -->
+  <div class="modal-bg" id="modal-nubank">
+    <div class="modal" style="width:min(540px,100%);">
+
+      <!-- Step: Conectar -->
+      <div id="nubank-step-conectar">
+        <div class="modal-title">Importar extrato do Nubank</div>
+        <p style="font-size:13px;color:var(--color-text-secondary);margin-bottom:12px;">Conecte sua conta via Open Finance para importar suas transações automaticamente.</p>
+        <div style="background:#E6F1FB;border-radius:var(--border-radius-md);padding:10px 14px;font-size:12px;color:#0C447C;display:flex;gap:8px;align-items:flex-start;margin-bottom:16px;">
+          <i class="ti ti-shield-check" aria-hidden="true" style="font-size:15px;margin-top:1px;flex-shrink:0;"></i>
+          <span>Acesso somente leitura. Nenhuma operação é realizada na sua conta Nubank.</span>
+        </div>
+        <div class="form-row" style="margin-bottom:4px;">
+          <div class="form-group">
+            <label class="form-label">De (mês)</label>
+            <input type="month" id="nubank-de" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Até (mês)</label>
+            <input type="month" id="nubank-ate" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-sm" onclick="fecharModal()">Cancelar</button>
+          <button type="button" class="btn-primary" onclick="iniciarConexaoPluggy()">
+            <i class="ti ti-plug-connected" aria-hidden="true"></i> Conectar Nubank
+          </button>
+        </div>
+      </div>
+
+      <!-- Step: Carregando -->
+      <div id="nubank-step-carregando" style="display:none;text-align:center;padding:32px 16px;">
+        <i class="ti ti-loader" style="font-size:36px;color:#378ADD;display:block;margin-bottom:12px;"></i>
+        <p style="font-size:13px;color:var(--color-text-secondary);" id="nubank-loading-msg">Iniciando conexão...</p>
+      </div>
+
+      <!-- Step: Preview transações -->
+      <div id="nubank-step-preview" style="display:none;">
+        <div class="modal-title">Transações encontradas</div>
+        <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:12px;">Selecione as que deseja importar. Desmarcadas serão ignoradas.</div>
+        <div id="nubank-preview-lista" style="max-height:340px;overflow-y:auto;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:4px 8px;margin-bottom:4px;"></div>
+        <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:4px;" id="nubank-preview-count"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn-sm" onclick="fecharModal()">Cancelar</button>
+          <button type="button" class="btn-sm" onclick="alternarSelecaoNubank()" id="btn-selecionar-tudo">Selecionar tudo</button>
+          <button type="button" class="btn-primary" onclick="confirmarImportacaoNubank()">
+            <i class="ti ti-download" aria-hidden="true"></i> Importar selecionadas
+          </button>
+        </div>
+      </div>
+
+      <!-- Step: Importando -->
+      <div id="nubank-step-importando" style="display:none;text-align:center;padding:32px 16px;">
+        <i class="ti ti-loader" style="font-size:36px;color:#378ADD;display:block;margin-bottom:12px;"></i>
+        <p style="font-size:13px;color:var(--color-text-secondary);" id="nubank-progress-msg">Importando transações...</p>
+      </div>
+
+      <!-- Step: Concluído -->
+      <div id="nubank-step-concluido" style="display:none;text-align:center;padding:32px 16px;">
+        <i class="ti ti-circle-check" style="font-size:44px;color:#1D9E75;display:block;margin-bottom:12px;"></i>
+        <p style="font-size:14px;font-weight:500;color:var(--color-text-primary);" id="nubank-concluido-msg">Importação concluída!</p>
+        <p style="font-size:12px;color:var(--color-text-secondary);margin-bottom:16px;">As transações já aparecem na lista de lançamentos.</p>
+        <button type="button" class="btn-primary" onclick="fecharModal()">Fechar</button>
+      </div>
+
+    </div>
+  </div>
+
 </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <script src="https://cdn.pluggy.ai/pluggy-connect/v2/pluggy-connect.js"></script>
   <script type="module" src="js/auth.js"></script>
   <script type="module" src="js/app.js"></script>
   <script src="js/pwa.js"></script>
