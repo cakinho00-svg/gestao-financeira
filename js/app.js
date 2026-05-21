@@ -883,6 +883,7 @@ onAuthStateChanged(auth, async (user) => {
 
     await carregarOpcoesFirestore();
     iniciarListenersFirestore();
+    sincronizarPluggy(true);
   } else {
     pararListenersFirestore();
   }
@@ -923,6 +924,10 @@ function mapearCategoria(cat) {
   return 'Outros';
 }
 
+function hoje() {
+  return new Date().toISOString().split('T')[0];
+}
+
 function nubankStep(step) {
   ['conectar', 'carregando', 'preview', 'importando', 'concluido'].forEach((s) => {
     const el = document.getElementById(`nubank-step-${s}`);
@@ -930,17 +935,99 @@ function nubankStep(step) {
   });
 }
 
+function pluggyIdsJaImportados() {
+  return new Set(lancamentos.map((l) => l.pluggyId).filter(Boolean));
+}
+
+async function salvarConexaoPluggy(itemId) {
+  await setDoc(
+    doc(db, 'usuarios', usuarioAtual.uid, 'configuracoes', 'pluggy'),
+    { itemId, ultimoSync: hoje() },
+    { merge: true }
+  );
+}
+
+async function carregarConexaoPluggy() {
+  try {
+    const snap = await getDoc(doc(db, 'usuarios', usuarioAtual.uid, 'configuracoes', 'pluggy'));
+    return snap.exists() ? snap.data() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function sincronizarPluggy(silencioso = false) {
+  const conexao = await carregarConexaoPluggy();
+  if (!conexao || !conexao.itemId) return;
+
+  nubankItemId = conexao.itemId;
+  const de = conexao.ultimoSync || mesAtual() + '-01';
+  const ate = hoje();
+
+  try {
+    const params = new URLSearchParams({ itemId: nubankItemId, de, ate });
+    const res = await fetch(`/api/pluggy-transactions?${params}`);
+    if (!res.ok) return;
+
+    const data = await res.json();
+    const novas = (data.transactions || []).filter(
+      (tx) => tx.id && !pluggyIdsJaImportados().has(tx.id)
+    );
+
+    for (const tx of novas) {
+      await addDoc(colUsuario('lancamentos'), montarLancamentoPluggy(tx));
+    }
+
+    await setDoc(
+      doc(db, 'usuarios', usuarioAtual.uid, 'configuracoes', 'pluggy'),
+      { ultimoSync: ate },
+      { merge: true }
+    );
+
+    if (!silencioso && novas.length > 0) {
+      console.log(`[Pluggy] ${novas.length} nova(s) transação(ões) sincronizada(s).`);
+    }
+  } catch (err) {
+    console.error('[Pluggy] Erro no auto-sync:', err);
+  }
+}
+
+function montarLancamentoPluggy(tx) {
+  const valor = Math.abs(tx.amount || 0);
+  const tipo = (tx.amount || 0) > 0 ? 'Receita' : 'Despesa';
+  const data = tx.date ? tx.date.split('T')[0] : hoje();
+  const conta = tx.accountType === 'CREDIT' ? 'Cartão de crédito' : 'Conta corrente';
+  const cartao = tx.accountType === 'CREDIT' ? 'Nubank' : (opcoesLancamento.cartoesCredito[0] || 'Não se aplica');
+  return {
+    desc: tx.description || tx.descriptionRaw || 'Nubank',
+    val: valor,
+    tipo,
+    cat: mapearCategoria(tx.category),
+    data,
+    conta,
+    cartao,
+    pluggyId: tx.id || '',
+    criadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+  };
+}
+
 window.abrirModalNubank = function () {
   nubankItemId = null;
   nubankTransacoes = [];
   nubankStep('conectar');
-  const mes = mesAtual();
-  document.getElementById('nubank-de').value = mes;
-  document.getElementById('nubank-ate').value = mes;
+  const mesAnoAtual = mesAtual();
+  document.getElementById('nubank-de').value = mesAnoAtual;
+  document.getElementById('nubank-ate').value = mesAnoAtual;
   document.getElementById('modal-nubank').classList.add('show');
 };
 
 window.iniciarConexaoPluggy = async function () {
+  if (typeof PluggyConnect === 'undefined') {
+    alert('Widget do Pluggy não carregou. Verifique sua conexão e recarregue a página.');
+    return;
+  }
+
   nubankStep('carregando');
   document.getElementById('nubank-loading-msg').textContent = 'Obtendo token de conexão...';
 
@@ -952,7 +1039,7 @@ window.iniciarConexaoPluggy = async function () {
     });
     const data = await res.json();
 
-    if (!data.accessToken) throw new Error('Token não recebido');
+    if (!data.accessToken) throw new Error('Token não recebido: ' + JSON.stringify(data));
 
     document.getElementById('nubank-loading-msg').textContent = 'Aguardando autenticação no Nubank...';
 
@@ -960,9 +1047,11 @@ window.iniciarConexaoPluggy = async function () {
       connectToken: data.accessToken,
       onSuccess: async ({ item }) => {
         nubankItemId = item.id;
+        await salvarConexaoPluggy(item.id);
         await buscarTransacoesNubank();
       },
-      onError: () => {
+      onError: (err) => {
+        console.error('Pluggy widget error:', err);
         nubankStep('conectar');
       },
       onClose: () => {
@@ -974,7 +1063,7 @@ window.iniciarConexaoPluggy = async function () {
   } catch (err) {
     console.error('Pluggy init error:', err);
     nubankStep('conectar');
-    alert('Erro ao iniciar conexão com Pluggy. Tente novamente.');
+    alert('Erro ao iniciar conexão com Pluggy: ' + err.message);
   }
 };
 
@@ -983,33 +1072,27 @@ async function buscarTransacoesNubank() {
   document.getElementById('nubank-loading-msg').textContent = 'Buscando transações...';
 
   try {
-    const de = document.getElementById('nubank-de').value;
-    const ate = document.getElementById('nubank-ate').value;
+    const de = (document.getElementById('nubank-de').value || mesAtual()) + '-01';
+    const ate = hoje();
 
-    const params = new URLSearchParams({ itemId: nubankItemId });
-    if (de) params.set('de', de + '-01');
-    if (ate) {
-      const [ano, mes] = ate.split('-');
-      const ultimo = new Date(Number(ano), Number(mes), 0).getDate();
-      params.set('ate', `${ate}-${ultimo}`);
-    }
-
+    const params = new URLSearchParams({ itemId: nubankItemId, de, ate });
     const res = await fetch(`/api/pluggy-transactions?${params}`);
-    if (!res.ok) throw new Error('Erro na API');
+    if (!res.ok) throw new Error('Erro na API: ' + res.status);
 
     const data = await res.json();
+    const jaImportados = pluggyIdsJaImportados();
     nubankTransacoes = data.transactions || [];
 
-    renderPreviewNubank();
+    renderPreviewNubank(jaImportados);
     nubankStep('preview');
   } catch (err) {
     console.error('Fetch transactions error:', err);
-    alert('Erro ao buscar transações. Tente novamente.');
+    alert('Erro ao buscar transações: ' + err.message);
     nubankStep('conectar');
   }
 }
 
-function renderPreviewNubank() {
+function renderPreviewNubank(jaImportados = new Set()) {
   const lista = document.getElementById('nubank-preview-lista');
   const count = document.getElementById('nubank-preview-count');
 
@@ -1019,20 +1102,25 @@ function renderPreviewNubank() {
     return;
   }
 
-  count.textContent = `${nubankTransacoes.length} transação(ões) encontrada(s)`;
+  const novas = nubankTransacoes.filter((tx) => !jaImportados.has(tx.id));
+  const duplicadas = nubankTransacoes.length - novas.length;
+  count.textContent = `${nubankTransacoes.length} encontrada(s)` +
+    (duplicadas > 0 ? ` · ${duplicadas} já importada(s) (desmarcadas)` : '');
 
   lista.innerHTML = nubankTransacoes.map((tx, i) => {
+    const jaExiste = jaImportados.has(tx.id);
     const positivo = (tx.amount || 0) > 0;
     const corValor = positivo ? '#1D9E75' : '#D85A30';
     const sinal = positivo ? '+' : '−';
     const dataFmt = tx.date ? tx.date.split('T')[0].split('-').reverse().join('/') : '';
     const desc = escapeHtml(tx.description || tx.descriptionRaw || 'Sem descrição');
     const conta = tx.accountType === 'CREDIT' ? 'Cartão' : 'Conta';
+    const opacidade = jaExiste ? 'opacity:0.45;' : '';
 
-    return `<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:0.5px solid var(--color-border-tertiary);cursor:pointer;">
-      <input type="checkbox" name="nubank-tx" value="${i}" checked style="flex-shrink:0;width:auto;" />
+    return `<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:0.5px solid var(--color-border-tertiary);cursor:pointer;${opacidade}">
+      <input type="checkbox" name="nubank-tx" value="${i}" ${jaExiste ? '' : 'checked'} style="flex-shrink:0;width:auto;" />
       <div style="flex:1;min-width:0;">
-        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${desc}</div>
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${desc}${jaExiste ? ' <span style="font-size:10px;color:#EF9F27;font-weight:400;">já importada</span>' : ''}</div>
         <div style="font-size:11px;color:var(--color-text-secondary);">${dataFmt} · ${conta} · ${escapeHtml(tx.accountName || '')}</div>
       </div>
       <div style="font-size:13px;font-weight:600;color:${corValor};flex-shrink:0;">${sinal} ${fmt(Math.abs(tx.amount || 0))}</div>
@@ -1062,30 +1150,15 @@ window.confirmarImportacaoNubank = async function () {
   for (const tx of selecionadas) {
     document.getElementById('nubank-progress-msg').textContent =
       `Importando ${importadas + 1} de ${selecionadas.length}...`;
-
-    const valor = Math.abs(tx.amount || 0);
-    const tipo = (tx.amount || 0) > 0 ? 'Receita' : 'Despesa';
-    const data = tx.date ? tx.date.split('T')[0] : new Date().toISOString().split('T')[0];
-    const desc = tx.description || tx.descriptionRaw || 'Nubank';
-    const conta = tx.accountType === 'CREDIT' ? 'Cartão de crédito' : 'Conta corrente';
-    const cartao = tx.accountType === 'CREDIT' ? 'Nubank' : (opcoesLancamento.cartoesCredito[0] || 'Não se aplica');
-    const cat = mapearCategoria(tx.category);
-
-    await addDoc(colUsuario('lancamentos'), {
-      desc,
-      val: valor,
-      tipo,
-      cat,
-      data,
-      conta,
-      cartao,
-      pluggyId: tx.id || '',
-      criadoEm: serverTimestamp(),
-      atualizadoEm: serverTimestamp(),
-    });
-
+    await addDoc(colUsuario('lancamentos'), montarLancamentoPluggy(tx));
     importadas++;
   }
+
+  await setDoc(
+    doc(db, 'usuarios', usuarioAtual.uid, 'configuracoes', 'pluggy'),
+    { ultimoSync: hoje() },
+    { merge: true }
+  );
 
   document.getElementById('nubank-concluido-msg').textContent =
     `${importadas} transação(ões) importada(s) com sucesso!`;
