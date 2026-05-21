@@ -1043,34 +1043,53 @@ window.iniciarConexaoPluggy = async function () {
       body: JSON.stringify({ clientUserId: usuarioAtual.uid }),
     });
     const data = await res.json();
-    if (!data.accessToken) throw new Error('Token não recebido: ' + JSON.stringify(data));
+    console.log('[Pluggy] Token response:', data);
+
+    const token = data.accessToken || data.connectToken || data.token;
+    if (!token) throw new Error('Token não recebido. Resposta: ' + JSON.stringify(data));
 
     const iframe = document.getElementById('pluggy-iframe');
-    iframe.src = `https://connect.pluggy.ai?connectToken=${encodeURIComponent(data.accessToken)}`;
+    // Pluggy hosted widget aceita connect_token como parâmetro de URL
+    iframe.src = `https://connect.pluggy.ai?connect_token=${token}`;
+    console.log('[Pluggy] iframe src:', iframe.src);
     nubankStep('widget');
 
     if (_pluggyMsgHandler) window.removeEventListener('message', _pluggyMsgHandler);
 
     _pluggyMsgHandler = async function (event) {
       const d = event.data;
-      if (!d || typeof d !== 'object') return;
+      console.log('[Pluggy] postMessage recebido:', event.origin, d);
 
-      // Tenta extrair itemId de diferentes formatos de mensagem do Pluggy
-      let itemId =
-        d?.payload?.item?.id ||
-        d?.data?.item?.id ||
-        d?.item?.id ||
-        d?.itemId ||
+      if (!d) return;
+
+      // Suporte a string JSON (alguns widgets enviam string)
+      let msg = d;
+      if (typeof d === 'string') {
+        try { msg = JSON.parse(d); } catch { return; }
+      }
+      if (typeof msg !== 'object') return;
+
+      // Extrai itemId de todos os formatos conhecidos do Pluggy
+      const itemId =
+        msg?.payload?.item?.id ||
+        msg?.data?.item?.id ||
+        msg?.item?.id ||
+        msg?.itemId ||
         null;
 
-      // Verifica diferentes tipos de evento de sucesso
-      const tipoSucesso =
-        d?.type === 'pluggyConnect::onSuccess' ||
-        d?.type === 'SUCCESS' ||
-        d?.event === 'onSuccess' ||
-        (itemId && (d?.type?.includes('success') || d?.type?.includes('Success')));
+      const type = msg?.type || msg?.event || '';
+      const ehSucesso =
+        type === 'pluggyConnect::onSuccess' ||
+        type === 'SUCCESS' ||
+        type === 'onSuccess' ||
+        (itemId && type.toLowerCase().includes('success'));
 
-      if (tipoSucesso && itemId) {
+      const ehFechamento =
+        type === 'pluggyConnect::onClose' ||
+        type === 'CLOSE' ||
+        type === 'onClose';
+
+      if (ehSucesso && itemId) {
         window.removeEventListener('message', _pluggyMsgHandler);
         _pluggyMsgHandler = null;
         iframe.src = '';
@@ -1080,8 +1099,7 @@ window.iniciarConexaoPluggy = async function () {
         return;
       }
 
-      // Fecha o widget se o usuário cancelar
-      if (d?.type === 'pluggyConnect::onClose' || d?.type === 'CLOSE' || d?.event === 'onClose') {
+      if (ehFechamento) {
         window.removeEventListener('message', _pluggyMsgHandler);
         _pluggyMsgHandler = null;
         iframe.src = '';
